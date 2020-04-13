@@ -5,6 +5,7 @@ import readchar
 import math
 import numpy
 import json
+from PCA9685 import PCA9685
 
 try:
     import pigpio
@@ -15,6 +16,9 @@ except ModuleNotFoundError:
 
 import tqdm
 
+
+# globals
+PEN_SERVO=7
 
 class BrachioGraph:
 
@@ -42,6 +46,10 @@ class BrachioGraph:
         # set the pantograph geometry
         self.INNER_ARM = inner_arm
         self.OUTER_ARM = outer_arm
+
+        self.INNER_SERVO=11
+        self.OUTER_SERVO=15
+        global PEN_SERVO
 
         self.virtual_mode = virtual_mode or force_virtual_mode
 
@@ -109,16 +117,15 @@ class BrachioGraph:
         else:
 
             # instantiate this Raspberry Pi as a pigpio.pi() instance
-            self.rpi = pigpio.pi()
+            self.pwm = PCA9685()
 
             # the pulse frequency should be no higher than 100Hz - higher values could (supposedly) damage the servos
-            self.rpi.set_PWM_frequency(14, 50)
-            self.rpi.set_PWM_frequency(15, 50)
+            self.pwm.setPWMFreq(50)
 
             # Initialise the pantograph with the motors in the centre of their travel
-            self.rpi.set_servo_pulsewidth(14, self.angles_to_pw_1(-90))
+            self.pwm.setServoPulse(self.INNER_SERVO, self.angles_to_pw_1(-90))
             sleep(0.3)
-            self.rpi.set_servo_pulsewidth(15, self.angles_to_pw_2(90))
+            self.pwm.setServoPulse(self.OUTER_SERVO, self.angles_to_pw_2(90))
             sleep(0.3)
 
             # by default we use a wait factor of 0.1 for accuracy
@@ -545,8 +552,8 @@ class BrachioGraph:
 
         else:
 
-            self.rpi.set_servo_pulsewidth(14, pw_1)
-            self.rpi.set_servo_pulsewidth(15, pw_2)
+            self.pwm.setServoPulse(self.INNER_SERVO, pw_1)
+            self.pwm.setServoPulse(self.OUTER_SERVO, pw_2)
 
 
     def get_pulse_widths(self):
@@ -558,8 +565,9 @@ class BrachioGraph:
 
         else:
 
-            actual_pulse_width_1 = self.rpi.get_servo_pulsewidth(14)
-            actual_pulse_width_2 = self.rpi.get_servo_pulsewidth(15)
+            # TODO: querying pulse width - how with PCA?
+            actual_pulse_width_1 = self.pwm.get_servo_pulsewidth(self.INNER_SERVO)
+            actual_pulse_width_2 = self.pwm.get_servo_pulsewidth(self.OUTER_SERVO)
 
         return (actual_pulse_width_1, actual_pulse_width_2)
 
@@ -577,7 +585,7 @@ class BrachioGraph:
         # self.quiet()
 
 
-    def quiet(self, servos=[14, 15, 18]):
+    def quiet(self, servos=[self.INNER_SERVO, self.OUTER_SERVO, PEN_SERVO]):
 
         # stop sending pulses to the servos
 
@@ -587,7 +595,7 @@ class BrachioGraph:
         else:
 
             for servo in servos:
-                self.rpi.set_servo_pulsewidth(servo, 0)
+                self.pwm.setServoPulse(servo, 0)
 
 
     # ----------------- trigonometric methods -----------------
@@ -649,7 +657,7 @@ class BrachioGraph:
 
     def calibrate(self, servo=1):
 
-        pin = {1: 14, 2: 15}[servo]
+        pin = {1: self.INNER_SERVO, 2: self.OUTER_SERVO}[servo]
 
         servo_centre = {1: self.servo_1_centre, 2: self.servo_2_centre}.get(servo)
         servo_angle_pws = []
@@ -668,7 +676,7 @@ class BrachioGraph:
         print(f"Calibrating servo {servo}, for the {texts['arm-name'][servo]} arm.")
         print(f"See https://brachiograph.art/how-to/calibrate.html")
         print()
-        self.rpi.set_servo_pulsewidth(pin, pw)
+        self.pwm.setServoPulse(pin, pw)
         print(f"The servo is now at {pw}µS, in the centre of its range of movement.")
         print("Attach the protractor to the base, with its centre at the axis of the servo.")
 
@@ -703,7 +711,7 @@ class BrachioGraph:
 
             print(pw)
 
-            self.rpi.set_servo_pulsewidth(pin, pw)
+            self.pwm.setServoPulse(pin, pw)
 
         print(f"------------------------")
         print(f"Recorded angles servo {servo}")
@@ -725,7 +733,7 @@ class BrachioGraph:
             )
         )(0))
 
-        self.rpi.set_servo_pulsewidth(pin, pw)
+        self.pwm.setServoPulse(pin, pw)
         print()
         print(f"The servo is now at {int(pw)}µS, which should correspond to {texts['nominal-centre'][servo]}˚.")
         print("If necessary, remount the arm at the centre of its optimal sweep for your drawing area.")
@@ -897,9 +905,12 @@ class BrachioGraph:
         return (self.bounds[2], self.bounds[1])
 
 
+
+
+
 class Pen:
 
-    def __init__(self, bg, pw_up=1700, pw_down=1300, pin=18, transition_time=0.25, virtual_mode=False):
+    def __init__(self, bg, pw_up=1700, pw_down=1300, pin=PEN_SERVO, transition_time=0.25, virtual_mode=False):
 
         self.bg = bg
         self.pin = pin
@@ -913,8 +924,8 @@ class Pen:
 
         else:
 
-            self.rpi = pigpio.pi()
-            self.rpi.set_PWM_frequency(self.pin, 50)
+            self.pwm = PCA9685()
+            self.pwm.setPWMFreq(50)
 
         self.up()
         sleep(0.3)
@@ -930,7 +941,7 @@ class Pen:
             self.virtual_pw = self.pw_down
 
         else:
-            self.rpi.set_servo_pulsewidth(self.pin, self.pw_down)
+            self.pwm.setServoPulse(self.pin, self.pw_down)
             sleep(self.transition_time)
 
 
