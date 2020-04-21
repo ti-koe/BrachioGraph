@@ -6,6 +6,7 @@ import math
 import numpy
 import json
 import PCA9685
+import pigpio
 
 try:
     import pigpio
@@ -110,7 +111,7 @@ class BrachioGraph:
 
             # instantiate this Raspberry Pi as a pigpio.pi() instance
             self.rpi = pigpio.pi()
-            self.pwm = PCA9685.PCA9685(rpi)
+            self.pwm = PCA9685.PCA9685(self.rpi)
 
             # the pulse frequency should be no higher than 100Hz - higher values could (supposedly) damage the servos
             self.pwm.set_frequency(50)
